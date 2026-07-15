@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import "./globals.css";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
+  const protocol = requestHeaders.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+  const base = new URL(`${protocol}://${host}`);
+  const image = new URL("/og.png", base).toString();
+  return {
+    metadataBase: base,
+    title: { default: "Liquor Stax", template: "%s | Liquor Stax" },
+    description: "Good drinks delivered on your time across Melbourne.",
+    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+    openGraph: {
+      title: "Liquor Stax — Good drinks. Great timing.",
+      description: "Shop wine, beer, spirits and premix with scheduled delivery.",
+      type: "website",
+      images: [{ url: image, width: 1659, height: 948, alt: "Liquor Stax — Good drinks. Great timing." }],
+    },
+    twitter: { card: "summary_large_image", title: "Liquor Stax", description: "Good drinks delivered on your time.", images: [image] },
+  };
+}
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="en-AU">
+      <body>{children}</body>
+    </html>
+  );
+}
