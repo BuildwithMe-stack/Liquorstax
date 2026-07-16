@@ -7,7 +7,7 @@ import {
   isDatabaseConfigured,
   placeDatabaseOrder,
 } from "@/lib/database";
-import { DEMO_ACCOUNT_OPENING_BALANCE_CENTS } from "@/lib/catalogue";
+import { CATALOGUE_PREVIEW_ONLY, DEMO_ACCOUNT_OPENING_BALANCE_CENTS } from "@/lib/catalogue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +46,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (CATALOGUE_PREVIEW_ONLY && isDatabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Current catalogue prices must be confirmed before connected-account orders can be charged" },
+      { status: 409 },
+    );
+  }
+
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return NextResponse.json({ error: "Order request is too large" }, { status: 413 });

@@ -4,7 +4,7 @@ import Storefront from "./storefront";
 export const metadata: Metadata = {
   title: "Liquor Stax — Drinks delivered on your time",
   description:
-    "Shop wine, beer, spirits and premix with scheduled delivery across Melbourne.",
+    "Shop Liquor Stax Craigieburn spirits, premix and local specials with scheduled delivery.",
 };
 
 export default function Home() {

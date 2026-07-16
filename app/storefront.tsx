@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CATALOGUE_PREVIEW_ONLY,
   DEMO_ACCOUNT_OPENING_BALANCE_CENTS,
   DELIVERY_FEE_CENTS,
   FREE_DELIVERY_THRESHOLD_CENTS,
@@ -9,6 +11,7 @@ import {
   deliverySlots,
   formatAud,
   products,
+  storeHighlights,
 } from "@/lib/catalogue";
 
 type RecentOrder = {
@@ -16,6 +19,19 @@ type RecentOrder = {
   deliverySlot: string;
   totalCents: number;
 };
+
+function BrandLogo({ className = "", preload = false }: { className?: string; preload?: boolean }) {
+  return (
+    <Image
+      src="/brand/liquor-stax-craigieburn-logo.jpg"
+      alt="Liquor Stax logo"
+      width={224}
+      height={224}
+      className={`brand-logo ${className}`.trim()}
+      preload={preload}
+    />
+  );
+}
 
 export default function Storefront() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -61,8 +77,10 @@ export default function Storefront() {
   const subtotalCents = cartItems.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);
   const deliveryFeeCents = subtotalCents >= FREE_DELIVERY_THRESHOLD_CENTS ? 0 : DELIVERY_FEE_CENTS;
   const totalCents = subtotalCents + deliveryFeeCents;
+  const liveCheckoutBlocked = CATALOGUE_PREVIEW_ONLY && accountMode === "database";
 
   function addToCart(id: number) {
+    if (liveCheckoutBlocked) return;
     setCart((current) => ({ ...current, [id]: (current[id] || 0) + 1 }));
     setCartOpen(true);
   }
@@ -131,7 +149,7 @@ export default function Storefront() {
       {!ageConfirmed && (
         <div className="age-gate" role="dialog" aria-modal="true" aria-labelledby="age-title">
           <div className="age-card">
-            <div className="brand-mark large"><span>L</span><span>S</span></div>
+            <BrandLogo className="brand-logo-large" preload />
             <p className="eyebrow">Welcome to Liquor Stax</p>
             <h1 id="age-title">Are you 18 or over?</h1>
             <p>You must be of legal drinking age to enter. Please enjoy responsibly.</p>
@@ -145,15 +163,15 @@ export default function Storefront() {
       <header className="site-header">
         <div className="header-main shell">
           <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Liquor Stax home">
-            <span className="brand-mark"><span>L</span><span>S</span></span>
+            <BrandLogo className="brand-logo-header" />
             <span className="brand-name">LIQUOR <b>STAX</b></span>
           </button>
           <label className="search">
             <span>⌕</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search wine, beer, spirits…" aria-label="Search products" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search spirits and premix…" aria-label="Search products" />
           </label>
           <button className="delivery-button" onClick={() => document.getElementById("delivery")?.scrollIntoView({ behavior: "smooth" })}>
-            <span className="icon-circle">⌖</span><span><small>Delivering to</small><strong>Melbourne 3000</strong></span>
+            <span className="icon-circle">⌖</span><span><small>Local store</small><strong>Craigieburn 3064</strong></span>
           </button>
           <button className="icon-button" onClick={() => setAccountOpen(true)} aria-label="Open account"><span>◯</span><small>Account</small></button>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Open basket with ${itemCount} items`}><span>Bag</span><b>{itemCount}</b></button>
@@ -168,14 +186,20 @@ export default function Storefront() {
         <div className="hero-copy">
           <p className="eyebrow light">Your local bottle shop, stacked</p>
           <h1>Good drinks.<br /><em>Great timing.</em></h1>
-          <p>From Friday knock-offs to last-minute dinner plans, get the right bottle delivered when it suits you.</p>
-          <div className="hero-actions"><button className="button light" onClick={() => document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" })}>Shop the range</button><button className="button ghost-light" onClick={() => setCategory("Zero alcohol")}>Explore 0.0%</button></div>
+          <p>Shop real Liquor Stax Craigieburn favourites, choose your delivery window and pay from your customer account.</p>
+          <div className="hero-actions"><button className="button light" onClick={() => document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" })}>Shop the range</button><button className="button ghost-light" onClick={() => { setCategory("Premix"); document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" }); }}>Browse premix</button></div>
         </div>
-        <div className="hero-art" aria-hidden="true">
-          <div className="sun"></div>
-          <div className="bottle hero-bottle one"><span>STAX<br /><small>APERITIF</small></span></div>
-          <div className="bottle hero-bottle two"><span>NORTH<br /><small>DRY GIN</small></span></div>
-          <div className="can hero-can"><span>COASTAL<br /><small>PALE ALE</small></span></div>
+        <div className="hero-art">
+          <Image
+            src="/brand/liquor-stax-craigieburn-storefront.jpg"
+            alt="Liquor Stax Craigieburn storefront"
+            fill
+            className="hero-storefront"
+            sizes="(max-width: 900px) 100vw, 50vw"
+            preload
+          />
+          <div className="hero-photo-shade" aria-hidden="true" />
+          <div className="hero-location"><span>CRAIGIEBURN</span><strong>Your local Stax</strong></div>
           <div className="hero-tag">DELIVERED<br /><b>ON YOUR TIME</b></div>
         </div>
       </section>
@@ -188,21 +212,45 @@ export default function Storefront() {
       </section>
 
       <section className="shop-section shell" id="shop">
-        <div className="section-heading"><div><p className="eyebrow">Popular right now</p><h2>What’s in the Stax</h2></div><p>Fresh picks, easy favourites and sharp prices.</p></div>
+        <div className="section-heading"><div><p className="eyebrow">Craigieburn catalogue</p><h2>From the Liquor Stax counter</h2></div><p>Real page specials photographed in store.</p></div>
         <div className="mobile-categories">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
         <div className="product-grid">
           {filtered.map((product) => (
             <article className="product-card" key={product.id}>
               <div className={`product-visual ${product.tone}`}>
+                <Image
+                  src={product.imageSrc}
+                  alt={product.imageAlt}
+                  fill
+                  className="product-image"
+                  style={{
+                    objectPosition: product.imagePosition,
+                    transform: `scale(${product.imageScale ?? 1})`,
+                    transformOrigin: product.imageTransformOrigin,
+                  }}
+                  sizes="(max-width: 560px) calc(100vw - 24px), (max-width: 900px) 50vw, 25vw"
+                />
                 {product.badge && <span className="badge">{product.badge}</span>}
-                <div className="product-bottle"><span>{product.initials}</span></div>
                 <button className="heart" aria-label={`Save ${product.name}`}>♡</button>
               </div>
-              <div className="product-info"><p className="product-category">{product.category}</p><h3>{product.name}</h3><p className="product-detail">{product.detail}</p><div className="price-row"><p><strong>{formatAud(product.priceCents)}</strong>{product.wasCents && <del>{formatAud(product.wasCents)}</del>}</p><button onClick={() => addToCart(product.id)} aria-label={`Add ${product.name} to basket`}>+</button></div></div>
+              <div className="product-info"><p className="product-category">{product.category}</p><h3>{product.name}</h3><p className="product-detail">{product.detail}</p><div className="price-row"><p><strong>{formatAud(product.priceCents)}</strong>{product.wasCents && <del>{formatAud(product.wasCents)}</del>}</p><button disabled={liveCheckoutBlocked} onClick={() => addToCart(product.id)} aria-label={liveCheckoutBlocked ? `${product.name} needs a confirmed live price` : `Add ${product.name} to basket`}>+</button></div></div>
             </article>
           ))}
         </div>
         {!filtered.length && <div className="empty-state"><h3>No drinks found</h3><p>Try a different search or browse all products.</p><button className="button primary" onClick={() => { setQuery(""); setCategory("All"); }}>Show everything</button></div>}
+        <p className="catalogue-note">Archived Facebook offers are shown for catalogue preview. Demo checkout remains available; connected-account checkout stays locked until current stock and prices are confirmed.</p>
+
+        <div className="highlight-heading"><div><p className="eyebrow">More from the shop floor</p><h2>Ask us about these in store</h2></div><p>More public page photography, without unverified online pricing.</p></div>
+        <div className="highlight-grid">
+          {storeHighlights.map((highlight) => (
+            <article className="highlight-card" key={highlight.title}>
+              <div className="highlight-image">
+                <Image src={highlight.imageSrc} alt={highlight.imageAlt} fill sizes="(max-width: 560px) calc(100vw - 24px), (max-width: 900px) 50vw, 25vw" />
+              </div>
+              <div><h3>{highlight.title}</h3><p>{highlight.detail}</p></div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="account-banner shell">
@@ -210,11 +258,11 @@ export default function Storefront() {
         <button className="button light" onClick={() => setAccountOpen(true)}>View demo account</button>
       </section>
 
-      <footer><div className="shell footer-grid"><div><div className="brand footer-brand"><span className="brand-mark"><span>L</span><span>S</span></span><span className="brand-name">LIQUOR <b>STAX</b></span></div><p>Good drinks, delivered responsibly.</p></div><div><strong>Shop</strong><a href="#shop">Wine</a><a href="#shop">Beer</a><a href="#shop">Spirits</a></div><div><strong>Help</strong><a href="#delivery">Delivery</a><a href="#">Returns</a><a href="#">Contact</a></div><div><strong>Responsible service</strong><p>Liquor Stax supports the responsible service of alcohol. No alcohol can be sold or supplied to anyone under 18.</p></div></div></footer>
+      <footer><div className="shell footer-grid"><div><div className="brand footer-brand"><BrandLogo className="brand-logo-footer" /><span className="brand-name">LIQUOR <b>STAX</b></span></div><p>Good drinks, delivered responsibly.</p></div><div><strong>Shop</strong><a href="#shop">Page specials</a><a href="#shop">Spirits</a><a href="#shop">Premix</a></div><div><strong>Help</strong><a href="#delivery">Delivery</a><a href="#">Returns</a><a href="#">Contact</a></div><div><strong>Responsible service</strong><p>Liquor Stax supports the responsible service of alcohol. No alcohol can be sold or supplied to anyone under 18.</p></div></div></footer>
 
-      {cartOpen && <div className="overlay" onMouseDown={(e) => { if (e.currentTarget === e.target) setCartOpen(false); }}><aside className="drawer" aria-label="Your basket"><div className="drawer-head"><div><p className="eyebrow">Your order</p><h2>Basket <span>{itemCount}</span></h2></div><button className="close" onClick={() => setCartOpen(false)}>×</button></div>{cartItems.length ? <><div className="cart-items">{cartItems.map((item) => <div className="cart-item" key={item.id}><div className={`mini-bottle ${item.tone}`}><span>{item.initials}</span></div><div><strong>{item.name}</strong><small>{item.detail}</small><div className="qty"><button onClick={() => updateQuantity(item.id, -1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)}>+</button></div></div><b>{formatAud(item.priceCents * item.quantity)}</b></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><b>{formatAud(subtotalCents)}</b></p><p><span>Delivery</span><b>{deliveryFeeCents ? formatAud(deliveryFeeCents) : "Free"}</b></p><p className="total"><span>Total</span><b>{formatAud(totalCents)}</b></p><button className="button primary full" onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}>Choose delivery & pay</button><small>Age and ID verification required at delivery.</small></div></> : <div className="empty-cart"><span>□</span><h3>Your basket is empty</h3><p>Let’s find something good to stack in here.</p><button className="button primary" onClick={() => setCartOpen(false)}>Keep shopping</button></div>}</aside></div>}
+      {cartOpen && <div className="overlay" onMouseDown={(e) => { if (e.currentTarget === e.target) setCartOpen(false); }}><aside className="drawer" aria-label="Your basket"><div className="drawer-head"><div><p className="eyebrow">Your order</p><h2>Basket <span>{itemCount}</span></h2></div><button className="close" onClick={() => setCartOpen(false)}>×</button></div>{cartItems.length ? <><div className="cart-items">{cartItems.map((item) => <div className="cart-item" key={item.id}><div className={`mini-bottle ${item.tone}`}><Image src={item.imageSrc} alt="" fill sizes="48px" /></div><div><strong>{item.name}</strong><small>{item.detail}</small><div className="qty"><button onClick={() => updateQuantity(item.id, -1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)}>+</button></div></div><b>{formatAud(item.priceCents * item.quantity)}</b></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><b>{formatAud(subtotalCents)}</b></p><p><span>Delivery</span><b>{deliveryFeeCents ? formatAud(deliveryFeeCents) : "Free"}</b></p><p className="total"><span>Total</span><b>{formatAud(totalCents)}</b></p><button className="button primary full" disabled={liveCheckoutBlocked} onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}>{liveCheckoutBlocked ? "Confirm live prices to enable checkout" : "Choose delivery & pay"}</button><small>Age and ID verification required at delivery.</small></div></> : <div className="empty-cart"><span>□</span><h3>Your basket is empty</h3><p>Let’s find something good to stack in here.</p><button className="button primary" onClick={() => setCartOpen(false)}>Keep shopping</button></div>}</aside></div>}
 
-      {checkoutOpen && <div className="overlay modal-overlay"><section className="checkout-modal"><button className="close" onClick={() => { setCheckoutOpen(false); setOrderState("idle"); setOrderError(""); }}>×</button>{orderState === "success" ? <div className="success"><span>✓</span><p className="eyebrow">Order confirmed</p><h2>Your delivery is booked.</h2><p>Order <strong>{orderNumber}</strong> will arrive <strong>{deliverySlot.toLowerCase()}</strong>. We’ve charged your Stax Account.</p><button className="button primary" onClick={() => { setCheckoutOpen(false); setOrderState("idle"); }}>Done</button></div> : <><div className="checkout-title"><p className="eyebrow">Secure checkout</p><h2>Delivery & payment</h2></div><form onSubmit={submitOrder}><div className="checkout-layout"><div><h3>1. Your details</h3><div className="field-row"><label>Full name<input name="name" defaultValue="Alex Morgan" required /></label><label>Email<input name="email" type="email" defaultValue="alex@example.com" required /></label></div><label>Delivery address<input name="address" defaultValue="120 Flinders Street, Melbourne VIC 3000" required /></label><label>Delivery instructions<input name="instructions" placeholder="Apartment, gate code or safe directions" /></label><h3>2. Delivery time</h3><div className="slot-grid">{deliverySlots.map((slot) => <button type="button" key={slot} className={deliverySlot === slot ? "selected" : ""} onClick={() => setDeliverySlot(slot)}><span>{slot.split(" · ")[0]}</span><strong>{slot.split(" · ")[1]}</strong></button>)}</div><h3>3. Payment</h3><label className="payment-option selected"><input type="radio" defaultChecked name="payment" /><span className="account-token">LS</span><span><strong>Stax Account · 1001</strong><small>Available credit: {formatAud(accountBalanceCents)}</small></span><b>{formatAud(totalCents)}</b></label></div><aside className="order-review"><h3>Order summary</h3>{cartItems.map((item) => <p key={item.id}><span>{item.quantity} × {item.name}</span><b>{formatAud(item.quantity * item.priceCents)}</b></p>)}<hr /><p><span>Delivery</span><b>{deliveryFeeCents ? formatAud(deliveryFeeCents) : "Free"}</b></p><p className="total"><span>Total</span><b>{formatAud(totalCents)}</b></p><button className="button primary full" disabled={orderState === "loading" || totalCents > accountBalanceCents}>{orderState === "loading" ? "Processing…" : totalCents > accountBalanceCents ? "Insufficient account credit" : `Charge account · ${formatAud(totalCents)}`}</button>{orderState === "error" && <p className="error">{orderError || "We couldn’t place that order. Please try again."}</p>}<small>By placing this order you confirm the recipient is 18+ and has valid photo ID.</small></aside></div></form></>}</section></div>}
+      {checkoutOpen && <div className="overlay modal-overlay"><section className="checkout-modal"><button className="close" onClick={() => { setCheckoutOpen(false); setOrderState("idle"); setOrderError(""); }}>×</button>{orderState === "success" ? <div className="success"><span>✓</span><p className="eyebrow">Order confirmed</p><h2>Your delivery is booked.</h2><p>Order <strong>{orderNumber}</strong> will arrive <strong>{deliverySlot.toLowerCase()}</strong>. We’ve charged your Stax Account.</p><button className="button primary" onClick={() => { setCheckoutOpen(false); setOrderState("idle"); }}>Done</button></div> : <><div className="checkout-title"><p className="eyebrow">Secure checkout</p><h2>Delivery & payment</h2></div><form onSubmit={submitOrder}><div className="checkout-layout"><div><h3>1. Your details</h3><div className="field-row"><label>Full name<input name="name" defaultValue="Alex Morgan" required /></label><label>Email<input name="email" type="email" defaultValue="alex@example.com" required /></label></div><label>Delivery address<input name="address" defaultValue="120 Flinders Street, Melbourne VIC 3000" required /></label><label>Delivery instructions<input name="instructions" placeholder="Apartment, gate code or safe directions" /></label><h3>2. Delivery time</h3><div className="slot-grid">{deliverySlots.map((slot) => <button type="button" key={slot} className={deliverySlot === slot ? "selected" : ""} onClick={() => setDeliverySlot(slot)}><span>{slot.split(" · ")[0]}</span><strong>{slot.split(" · ")[1]}</strong></button>)}</div><h3>3. Payment</h3><label className="payment-option selected"><input type="radio" defaultChecked name="payment" /><span className="account-token">LS</span><span><strong>Stax Account · 1001</strong><small>Available credit: {formatAud(accountBalanceCents)}</small></span><b>{formatAud(totalCents)}</b></label></div><aside className="order-review"><h3>Order summary</h3>{cartItems.map((item) => <p key={item.id}><span>{item.quantity} × {item.name}</span><b>{formatAud(item.quantity * item.priceCents)}</b></p>)}<hr /><p><span>Delivery</span><b>{deliveryFeeCents ? formatAud(deliveryFeeCents) : "Free"}</b></p><p className="total"><span>Total</span><b>{formatAud(totalCents)}</b></p><button className="button primary full" disabled={liveCheckoutBlocked || orderState === "loading" || totalCents > accountBalanceCents}>{liveCheckoutBlocked ? "Confirm live prices before charging" : orderState === "loading" ? "Processing…" : totalCents > accountBalanceCents ? "Insufficient account credit" : `Charge account · ${formatAud(totalCents)}`}</button>{orderState === "error" && <p className="error">{orderError || "We couldn’t place that order. Please try again."}</p>}<small>By placing this order you confirm the recipient is 18+ and has valid photo ID.</small></aside></div></form></>}</section></div>}
 
       {accountOpen && <div className="overlay" onMouseDown={(e) => { if (e.currentTarget === e.target) setAccountOpen(false); }}><aside className="drawer account-drawer"><div className="drawer-head"><div><p className="eyebrow">{accountMode === "database" ? "Connected account" : "Demo customer"}</p><h2>Stax Account</h2></div><button className="close" onClick={() => setAccountOpen(false)}>×</button></div><div className="account-card"><span>LIQUOR STAX</span><p>Available credit</p><strong>{formatAud(accountBalanceCents)}</strong><small>ACCOUNT ···· 1001</small></div><div className="account-stat"><span>This session</span><strong>{formatAud(Math.max(0, DEMO_ACCOUNT_OPENING_BALANCE_CENTS - accountBalanceCents))} spent</strong></div><div className="recent-orders"><h3>Recent orders</h3>{recentOrders.length ? recentOrders.map((order) => <div className="account-stat" key={order.orderNumber}><span>{order.orderNumber}<small>{order.deliverySlot}</small></span><strong>{formatAud(order.totalCents)}</strong></div>) : <div className="empty-account"><span>◎</span><p>Your completed orders will appear here.</p></div>}</div><button className="button primary full" onClick={() => { setAccountOpen(false); document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" }); }}>Start an order</button></aside></div>}
     </main>
