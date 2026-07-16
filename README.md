@@ -1,98 +1,63 @@
-# vinext-starter
+# Liquor Stax
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Liquor Stax is a Next.js 16 storefront for browsing drinks, choosing a delivery
+window, and charging an internal customer account. It is configured for native
+Vercel deployment.
 
-## Prerequisites
+## Local development
 
-- Node.js `>=22.13.0`
+Requirements:
 
-## Quick Start
+- Node.js 22
+- pnpm 10.32
 
 ```bash
-npm install
-npm run dev
-npm run build
+pnpm install
+pnpm dev
 ```
 
-This starter does not use `wrangler.jsonc`.
+Open <http://localhost:3000>. Run the complete deployment check with:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+pnpm check
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+## Database
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+The durable database is PostgreSQL. Neon is the recommended Vercel provider,
+although any serverless Postgres service that supplies `DATABASE_URL` or
+`POSTGRES_URL` will work.
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+1. In the Vercel project, open **Storage** and add a Postgres integration such
+   as Neon.
+2. Connect it to the Production, Preview, and Development environments.
+3. Redeploy. Vercel injects the connection string automatically.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+The checkout route creates the required tables and the preview account on its
+first database request. Money is stored as integer cents, and each order uses
+an atomic guarded balance deduction so two checkouts cannot spend the same
+credit. A unique checkout token also makes retries idempotent, preventing a
+timeout retry from charging the account twice.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+When no Postgres connection is present, the storefront remains usable in demo
+mode. Demo credit is stored in a signed, HTTP-only browser cookie and has no
+cash value. Set `DEMO_ACCOUNT_SECRET` to a long random value if this preview
+mode is exposed publicly.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+Copy [`.env.example`](./.env.example) to `.env.local` to connect local
+development to Postgres.
 
-## Useful Commands
+## Deploy to Vercel
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Import `BuildwithMe-stack/Liquorstax` into Vercel or keep the existing Git
+integration. The repository pins the framework to Next.js, Node 22, and pnpm
+10.32. Vercel runs `pnpm build` and deploys the resulting `.next` output.
 
-## Learn More
+No Cloudflare Worker, Wrangler, vinext, or D1 binding is required.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Production note
+
+The current account is an explicit storefront demo (`stax-1001`). Before using
+real customer funds, add authenticated customer sessions, bind each session to
+its own account, and connect an authorised payment/ledger provider. The current
+flow charges stored demo credit; it does not process bank cards.

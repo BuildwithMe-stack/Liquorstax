@@ -1,71 +1,174 @@
-import { env } from "cloudflare:workers";
-import { NextResponse } from "next/server";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { CheckoutValidationError, validateCheckout } from "@/lib/checkout";
+import {
+  InsufficientAccountCreditError,
+  getAccountBalanceCents,
+  isDatabaseConfigured,
+  placeDatabaseOrder,
+} from "@/lib/database";
+import { DEMO_ACCOUNT_OPENING_BALANCE_CENTS } from "@/lib/catalogue";
 
-type CheckoutItem = { productId: number; quantity: number };
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const catalogue = new Map([
-  [1, { name: "Yarra Valley Pinot Noir", price: 24 }],
-  [2, { name: "Coastal Pale Ale", price: 22 }],
-  [3, { name: "North Star Dry Gin", price: 49 }],
-  [4, { name: "Limoncello Spritz", price: 19 }],
-  [5, { name: "Barossa Shiraz", price: 18 }],
-  [6, { name: "Japanese Malt Whisky", price: 76 }],
-  [7, { name: "Crisp Apple Cider", price: 27 }],
-  [8, { name: "Zero Proof Aperitivo", price: 29 }],
-]);
+const DEMO_BALANCE_COOKIE = "liquor_stax_demo_balance";
+const MAX_REQUEST_BYTES = 32_000;
 
-async function ensureSchema(db: D1Database) {
-  await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS customer_accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, credit_balance REAL NOT NULL DEFAULT 250, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT NOT NULL UNIQUE, account_id TEXT NOT NULL, customer_name TEXT NOT NULL, customer_email TEXT NOT NULL, delivery_address TEXT NOT NULL, delivery_instructions TEXT NOT NULL DEFAULT '', delivery_slot TEXT NOT NULL, subtotal REAL NOT NULL, delivery_fee REAL NOT NULL, total REAL NOT NULL, payment_method TEXT NOT NULL DEFAULT 'account_credit', status TEXT NOT NULL DEFAULT 'confirmed', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT NOT NULL, product_id INTEGER NOT NULL, product_name TEXT NOT NULL, unit_price REAL NOT NULL, quantity INTEGER NOT NULL)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS account_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id TEXT NOT NULL, order_number TEXT NOT NULL, amount REAL NOT NULL, type TEXT NOT NULL DEFAULT 'order_charge', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS orders_account_idx ON orders (account_id)`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items (order_number)`),
-  ]);
-  await db.prepare(`INSERT OR IGNORE INTO customer_accounts (id, email, display_name, credit_balance) VALUES (?, ?, ?, ?)`).bind("stax-1001", "alex@example.com", "Alex Morgan", 250).run();
+type DemoAccountState = {
+  balanceCents: number;
+  lastCheckoutToken?: string;
+  lastOrderNumber?: string;
+  lastSubtotalCents?: number;
+  lastDeliveryFeeCents?: number;
+  lastTotalCents?: number;
+};
+
+export async function GET(request: NextRequest) {
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({
+      accountId: "stax-1001",
+      balanceCents: readDemoState(request).balanceCents,
+      mode: "demo",
+    });
+  }
+
+  try {
+    return NextResponse.json({
+      accountId: "stax-1001",
+      balanceCents: await getAccountBalanceCents(),
+      mode: "database",
+    });
+  } catch (error) {
+    console.error("Unable to load the customer account", error);
+    return NextResponse.json({ error: "Account service is temporarily unavailable" }, { status: 503 });
+  }
 }
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json() as {
-      items?: CheckoutItem[];
-      deliverySlot?: string;
-      customer?: { name?: string; email?: string; address?: string; instructions?: string };
-    };
-    if (!body.items?.length || !body.deliverySlot || !body.customer?.name || !body.customer.email || !body.customer.address) {
-      return NextResponse.json({ error: "Missing order details" }, { status: 400 });
-    }
-
-    const validated = body.items.map((item) => {
-      const product = catalogue.get(Number(item.productId));
-      const quantity = Math.min(24, Math.max(1, Math.floor(Number(item.quantity))));
-      if (!product) throw new Error("Unknown product");
-      return { ...product, id: Number(item.productId), quantity };
-    });
-    const subtotal = validated.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const deliveryFee = subtotal >= 100 ? 0 : 9;
-    const total = subtotal + deliveryFee;
-    const db = env.DB;
-    if (!db) throw new Error("Account service unavailable");
-    await ensureSchema(db);
-
-    const account = await db.prepare(`SELECT credit_balance FROM customer_accounts WHERE id = ?`).bind("stax-1001").first<{ credit_balance: number }>();
-    if (!account || Number(account.credit_balance) < total) {
-      return NextResponse.json({ error: "Insufficient account credit" }, { status: 402 });
-    }
-
-    const orderNumber = `LS-${Date.now().toString(36).toUpperCase()}`;
-    const statements = [
-      db.prepare(`INSERT INTO orders (order_number, account_id, customer_name, customer_email, delivery_address, delivery_instructions, delivery_slot, subtotal, delivery_fee, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(orderNumber, "stax-1001", String(body.customer.name), String(body.customer.email), String(body.customer.address), String(body.customer.instructions || ""), body.deliverySlot, subtotal, deliveryFee, total),
-      ...validated.map((item) => db.prepare(`INSERT INTO order_items (order_number, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?)`).bind(orderNumber, item.id, item.name, item.price, item.quantity)),
-      db.prepare(`UPDATE customer_accounts SET credit_balance = credit_balance - ? WHERE id = ? AND credit_balance >= ?`).bind(total, "stax-1001", total),
-      db.prepare(`INSERT INTO account_transactions (account_id, order_number, amount, type) VALUES (?, ?, ?, ?)`).bind("stax-1001", orderNumber, -total, "order_charge"),
-    ];
-    await db.batch(statements);
-    return NextResponse.json({ orderNumber, total });
-  } catch (error) {
-    console.error("Checkout failed", error);
-    return NextResponse.json({ error: "Unable to place order" }, { status: 500 });
+export async function POST(request: NextRequest) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+    return NextResponse.json({ error: "Order request is too large" }, { status: 413 });
   }
+
+  let input: unknown;
+  try {
+    const requestBody = await request.text();
+    if (Buffer.byteLength(requestBody, "utf8") > MAX_REQUEST_BYTES) {
+      return NextResponse.json({ error: "Order request is too large" }, { status: 413 });
+    }
+    input = JSON.parse(requestBody) as unknown;
+  } catch {
+    return NextResponse.json({ error: "Invalid order details" }, { status: 400 });
+  }
+
+  try {
+    const order = validateCheckout(input);
+
+    if (!isDatabaseConfigured()) {
+      const demoState = readDemoState(request);
+      if (demoState.lastCheckoutToken === order.checkoutToken && demoState.lastOrderNumber) {
+        return NextResponse.json({
+          orderNumber: demoState.lastOrderNumber,
+          subtotalCents: demoState.lastSubtotalCents,
+          deliveryFeeCents: demoState.lastDeliveryFeeCents,
+          totalCents: demoState.lastTotalCents,
+          balanceCents: demoState.balanceCents,
+          mode: "demo",
+        });
+      }
+      if (demoState.balanceCents < order.totalCents) {
+        return NextResponse.json({ error: "Insufficient account credit" }, { status: 402 });
+      }
+
+      const orderNumber = createOrderNumber();
+      const nextState: DemoAccountState = {
+        balanceCents: demoState.balanceCents - order.totalCents,
+        lastCheckoutToken: order.checkoutToken,
+        lastOrderNumber: orderNumber,
+        lastSubtotalCents: order.subtotalCents,
+        lastDeliveryFeeCents: order.deliveryFeeCents,
+        lastTotalCents: order.totalCents,
+      };
+      const response = NextResponse.json({
+        orderNumber,
+        subtotalCents: order.subtotalCents,
+        deliveryFeeCents: order.deliveryFeeCents,
+        totalCents: order.totalCents,
+        balanceCents: nextState.balanceCents,
+        mode: "demo",
+      });
+      response.cookies.set(DEMO_BALANCE_COOKIE, encodeDemoState(nextState), {
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 30,
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      return response;
+    }
+
+    const result = await placeDatabaseOrder(order);
+    return NextResponse.json({
+      orderNumber: result.orderNumber,
+      subtotalCents: order.subtotalCents,
+      deliveryFeeCents: order.deliveryFeeCents,
+      totalCents: order.totalCents,
+      balanceCents: result.balanceCents,
+      mode: "database",
+    });
+  } catch (error) {
+    if (error instanceof CheckoutValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof InsufficientAccountCreditError) {
+      return NextResponse.json({ error: error.message }, { status: 402 });
+    }
+
+    console.error("Checkout failed", error);
+    return NextResponse.json({ error: "Account service is temporarily unavailable" }, { status: 503 });
+  }
+}
+
+function readDemoState(request: NextRequest): DemoAccountState {
+  const encoded = request.cookies.get(DEMO_BALANCE_COOKIE)?.value;
+  if (!encoded) return { balanceCents: DEMO_ACCOUNT_OPENING_BALANCE_CENTS };
+
+  const [payload, suppliedSignature] = encoded.split(".");
+  const expectedSignature = signDemoPayload(payload ?? "");
+  const supplied = Buffer.from(suppliedSignature ?? "");
+  const expected = Buffer.from(expectedSignature);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    return { balanceCents: DEMO_ACCOUNT_OPENING_BALANCE_CENTS };
+  }
+
+  try {
+    const state = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as DemoAccountState;
+    if (
+      !Number.isInteger(state.balanceCents) ||
+      state.balanceCents < 0 ||
+      state.balanceCents > DEMO_ACCOUNT_OPENING_BALANCE_CENTS
+    ) {
+      return { balanceCents: DEMO_ACCOUNT_OPENING_BALANCE_CENTS };
+    }
+    return state;
+  } catch {
+    return { balanceCents: DEMO_ACCOUNT_OPENING_BALANCE_CENTS };
+  }
+}
+
+function encodeDemoState(state: DemoAccountState): string {
+  const payload = Buffer.from(JSON.stringify(state)).toString("base64url");
+  return `${payload}.${signDemoPayload(payload)}`;
+}
+
+function signDemoPayload(payload: string): string {
+  // This cookie only protects the zero-value preview account. Real balances are
+  // stored in Postgres whenever DATABASE_URL (or POSTGRES_URL) is configured.
+  const secret = process.env.DEMO_ACCOUNT_SECRET || "liquor-stax-preview-account";
+  return createHmac("sha256", secret).update(payload).digest("base64url");
+}
+
+function createOrderNumber(): string {
+  return `LS-${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 }

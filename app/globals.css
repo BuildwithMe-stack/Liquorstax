@@ -169,6 +169,7 @@ footer { background:var(--ink); color:white; padding:55px 0; }
 .account-card strong { font-family:Georgia,serif; font-size:34px; }
 .account-card small { margin-top:auto; letter-spacing:.12em; color:#b9c9c1; }
 .account-stat { display:flex; justify-content:space-between; padding:15px 0; border-bottom:1px solid var(--line); font-size:13px; }
+.account-stat span small { display:block; color:#7b847f; margin-top:4px; }
 .recent-orders { flex:1; padding:25px 0; }
 .recent-orders h3 { font-family:Georgia,serif; }
 .empty-account { text-align:center; color:#7b847f; padding:38px; border:1px dashed #ccc5b8; border-radius:5px; }
