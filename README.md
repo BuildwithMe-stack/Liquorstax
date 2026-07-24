@@ -10,11 +10,13 @@ scheduled delivery, customer receipts and a protected owner portal.
 - Home, Products, Cart, My Lists, Account and About Us pages.
 - Age gate, sign-up prompt, returning-customer greeting and browser-local sample account.
 - Wine, Whisky, Bourbon, Premix, Vodka, Gin, Rum, Tequila, Beer, Cider,
-  Sparkling, Liqueur, Non-alcoholic and Promotion filters.
-- Clearly unavailable placeholder cards until the owner provides the real stock list.
+  Sparkling, Liqueur, Non-alcoholic, Other and Promotion filters.
+- Owner-supplied catalogue import with 557 currently sellable stock-safe packs,
+  prices from the spreadsheet’s `Price` column and stock from its case/item
+  counts.
 - New, Sale, Member and Price Drop stickers.
-- Express delivery using a Google-selected address and server-calculated road
-  distance from 119 Highlander Dr at $1.50/km.
+- Express delivery at a flat $10 after a Google-selected address is checked
+  against the owner-approved delivery zone from 119 Highlander Dr.
 - Normal delivery for the next available business day, prepared for Australia
   Post handover and included in the owner’s daily report. Open weekdays ordered
   before cutoff use one open-business-day lead time; orders at/after cutoff, on
@@ -51,8 +53,10 @@ silently moving to a future Node major. If Vercel ignores the pnpm pin, set
 
 ## Owner-sample safety
 
-The archived Facebook products are visual samples, not a current stock file.
-Keep these values until current SKUs, prices and inventory are approved:
+The website is still an owner sample: its imported catalogue makes current
+selling prices and available packs visible, but sample checkout is not a real
+payment or stock-decrement path. Keep these values until provider credentials,
+licensing and a live Shopfront/database inventory sync are approved:
 
 ```dotenv
 NEXT_PUBLIC_CATALOGUE_PREVIEW_ONLY=true
@@ -65,25 +69,59 @@ Preview checkout creates only a signed, zero-value sample order. A preview
 express quote is visibly labelled and is cryptographically rejected as soon as
 live commerce is enabled. Placeholder products cannot enter the cart.
 
+## Stock import and catalogue images
+
+The supplied stock file is imported without exposing `Cost` or `Profit`:
+
+```bash
+pnpm stock:import "/absolute/path/to/stocklist.csv"
+pnpm stock:seed
+```
+
+`Quantity` is treated as the customer’s sellable pack size; available packs are
+calculated from `(Cases on hand × Case Quantity) + Items on hand`. Some source
+items contain several price/pack rows that share the same physical inventory.
+The importer selects one safe sellable tier per source item, preventing two
+independent variants from overselling the same bottles.
+
+The storefront uses exact official bottle images only where an exact source has
+been curated; the remaining products use clearly labelled range artwork instead
+of a misleading pack shot. Review [`data/product-image-provenance.json`](./data/product-image-provenance.json)
+and confirm brand-use rights and packaging before live launch.
+
 ## Database and owner portal
 
 1. Connect Neon Postgres and set `DATABASE_URL`.
 2. Apply [`db/migrations/001_commerce_admin.sql`](./db/migrations/001_commerce_admin.sql)
    in the Neon SQL editor before accepting real data.
-3. Generate an owner password hash in an interactive terminal:
+3. Run `pnpm stock:seed`, then apply the generated
+   [`db/seeds/stock-catalogue.sql`](./db/seeds/stock-catalogue.sql) in Neon to
+   upsert the latest supplied stock. This is the intentional hand-off from the
+   owner CSV to the database; it does not run automatically against a database.
+4. Generate an owner password hash in an interactive terminal:
 
    ```bash
    pnpm admin:hash
    ```
 
-4. Set `ADMIN_EMAIL`, the generated `ADMIN_PASSWORD_HASH`, and a random
+5. Set `ADMIN_EMAIL`, the generated `ADMIN_PASSWORD_HASH`, and a random
    `ADMIN_SESSION_SECRET` of at least 32 characters.
-5. Sign in at `/admin`. There are no demo owner credentials.
+6. Sign in at `/admin`. There are no demo owner credentials.
 
 The migration stores customer name, E.164 phone, email and addresses, along
 with products, daily offers, delivery details, fee/GST components, Shopfront
 IDs and idempotent sync events. Admin sessions are signed, HttpOnly,
 SameSite=Strict and expire after eight hours.
+
+## Facebook catalogue feed
+
+`GET /api/catalogue/facebook` produces a conservative CSV feed using the same
+catalogue data. It emits only in-stock, priced products with exact, locally
+hosted bottle images; it excludes range artwork and never includes supplier IDs,
+cost, profit or raw stock calculations. It is a feed-format export, not a
+guarantee that Meta will approve alcohol listings. Confirm the correct Meta
+surface, age restrictions, liquor licence and current advertising/catalogue
+policies before uploading it.
 
 ## Express delivery
 
@@ -97,9 +135,9 @@ Set:
 - `EXPRESS_MAX_DISTANCE_KM` — owner-approved delivery radius.
 
 The browser sends only a Google Place ID. The server obtains the canonical
-address, distance and duration, calculates `round(distance metres × 150 / 1000)`
-cents, and signs an expiring quote. Checkout verifies that token and never
-trusts a browser-supplied fee.
+address, road distance and duration to confirm the delivery zone, then signs
+an expiring flat-$10 quote. Checkout verifies that token and never trusts a
+browser-supplied fee.
 
 ## Normal delivery and daily report
 

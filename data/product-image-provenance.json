@@ -1,0 +1,21 @@
+{
+  "reviewRequiredBeforeLiveUse": true,
+  "notes": "Exact bottle files below were retrieved from official brand product pages for this owner sample. Confirm current brand-use rights, local product availability and packaging before a public launch or Meta upload.",
+  "images": [
+    {
+      "localPath": "/catalogue/stock/1800-coconut.jpg",
+      "matches": "1800 COCONUT TEQUILA 700ML",
+      "sourcePage": "https://www.1800tequila.com/products/coconut/"
+    },
+    {
+      "localPath": "/catalogue/stock/1800-blanco.jpg",
+      "matches": "1800 SILVER TEQUILA 700ML",
+      "sourcePage": "https://www.1800tequila.com/products/blanco"
+    },
+    {
+      "localPath": "/catalogue/stock/19-crimes-pinot-noir.png",
+      "matches": "19 CRIMES PINOT NOIR 750ML",
+      "sourcePage": "https://global.19crimes.com/products/pinot-noir"
+    }
+  ]
+}

@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: base,
     title: { default: "Liquor Stax", template: "%s | Liquor Stax" },
-    description: "Your Craigieburn local for offers, distance-priced express delivery and normal Australia Post dispatch.",
+    description: "Your Craigieburn local for offers, $10 flat-rate express delivery and normal Australia Post dispatch.",
     icons: {
       icon: "/brand/liquor-stax-craigieburn-logo.jpg",
       shortcut: "/brand/liquor-stax-craigieburn-logo.jpg",

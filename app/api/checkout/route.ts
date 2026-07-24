@@ -56,12 +56,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const databaseCatalogue = await getPublicCatalogueData();
-    const dynamicIds = new Set(databaseCatalogue.products.map((product) => product.id));
-    const order = validateCheckout(input, [
-      ...products.filter((product) => !dynamicIds.has(product.id)),
-      ...databaseCatalogue.products,
-    ]);
+    const publicCatalogue = await getPublicCatalogueData();
+    // The owner import replaces the archived design cards whenever it is
+    // present, so preview orders use the supplied selling prices and stock.
+    const order = validateCheckout(
+      input,
+      publicCatalogue.products.length ? publicCatalogue.products : products,
+    );
     const demoState = readDemoState(request);
     if (demoState.lastCheckoutToken === order.checkoutToken && demoState.lastOrderNumber) {
       return NextResponse.json({

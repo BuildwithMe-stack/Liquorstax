@@ -180,16 +180,16 @@ export default function AddressAutocomplete({
           disabled={quoting || address.trim().length < 8}
           onClick={() => void requestQuote()}
         >
-          {quoting ? "Calculating…" : searchUnavailable ? "Calculate sample quote" : "Check express delivery"}
+          {quoting ? "Checking…" : searchUnavailable ? "Check sample address" : "Check express delivery"}
         </button>
       ) : null}
-      {quoting && !previewMode ? <p className="address-status">Calculating the road distance…</p> : null}
+      {quoting && !previewMode ? <p className="address-status">Checking the delivery address…</p> : null}
       {error ? <p className="address-error" role="alert">{error}</p> : null}
       {quote ? (
         <div className={`delivery-quote ${quote.sample ? "sample" : ""}`}>
           <div><span>Road distance</span><strong>{(quote.distanceMeters / 1_000).toFixed(1)} km</strong></div>
           <div><span>Estimated drive</span><strong>{Math.max(1, Math.round(quote.durationSeconds / 60))} min</strong></div>
-          <div><span>$1.50 per km</span><strong>{formatAud(quote.deliveryFeeCents)}</strong></div>
+          <div><span>Express delivery</span><strong>{formatAud(quote.deliveryFeeCents)} flat rate</strong></div>
           {quote.sample ? <small>Sample only · Google route not configured · rejected by live checkout</small> : null}
         </div>
       ) : null}

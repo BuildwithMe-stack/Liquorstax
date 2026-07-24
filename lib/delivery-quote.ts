@@ -1,7 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SHOP_DISPATCH_ADDRESS = "119 Highlander Dr, Craigieburn VIC 3064";
-export const EXPRESS_RATE_CENTS_PER_KM = 150;
+/**
+ * Express is a single transparent fee. We keep the legacy rate field in an
+ * order record as zero so historical distance-priced orders remain readable.
+ */
+export const EXPRESS_RATE_CENTS_PER_KM = 0;
+export const EXPRESS_FLAT_FEE_CENTS = 1_000;
 export const DEFAULT_MAX_EXPRESS_DISTANCE_KM = 40;
 export const DEFAULT_DELIVERY_QUOTE_TTL_SECONDS = 10 * 60;
 
@@ -9,7 +14,7 @@ const MAX_DELIVERY_QUOTE_TTL_SECONDS = 30 * 60;
 const PREVIEW_QUOTE_SECRET = "liquor-stax-owner-sample-delivery-quote-only";
 
 export type ExpressDeliveryQuote = {
-  version: 1;
+  version: 2;
   deliveryMethod: "express";
   address: string;
   placeId: string;
@@ -99,7 +104,7 @@ export function calculateExpressDeliveryFee(distanceMeters: number): number {
   if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
     throw new DeliveryQuoteError("The delivery distance is invalid", "invalid");
   }
-  return Math.round((distanceMeters * EXPRESS_RATE_CENTS_PER_KM) / 1_000);
+  return EXPRESS_FLAT_FEE_CENTS;
 }
 
 export function signDeliveryQuote(
@@ -127,7 +132,7 @@ export function signDeliveryQuote(
 
   const issuedAt = Math.floor(now / 1_000);
   const payload: ExpressDeliveryQuote = {
-    version: 1,
+    version: 2,
     deliveryMethod: "express",
     address,
     placeId,
@@ -205,7 +210,7 @@ export function verifyDeliveryQuote(
   const configuration = getDeliveryBackendConfiguration();
   const currentSeconds = Math.floor(now / 1_000);
   const validShape =
-    payload.version === 1 &&
+    payload.version === 2 &&
     payload.deliveryMethod === "express" &&
     typeof payload.address === "string" &&
     payload.address === cleanAddress(payload.address) &&

@@ -7,7 +7,13 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const data = await getPublicCatalogueData();
-    return NextResponse.json(data, {
+    // Source IDs are useful only for server-side stock merges. Do not expose
+    // supplier/export identifiers in the public catalogue response.
+    const publicData = {
+      ...data,
+      products: data.products.map(({ sourceProductId: _sourceProductId, ...product }) => product),
+    };
+    return NextResponse.json(publicData, {
       headers: {
         "cache-control": "public, s-maxage=30, stale-while-revalidate=120",
       },

@@ -12,6 +12,7 @@ export type AlcoholType =
   | "Sparkling"
   | "Liqueur"
   | "Non-alcoholic"
+  | "Other"
   | "Promotion";
 
 export type ProductCollection =
@@ -45,6 +46,12 @@ export type Product = {
   imageTransformOrigin?: string;
   /** Server-sourced sellable units. Live checkout requires this value. */
   inventoryQuantity?: number;
+  /** Stable identifier from the supplied shop stock export, when available. */
+  sourceProductId?: string;
+  /** Number of underlying units represented by this sellable pack. */
+  packQuantity?: number;
+  /** True where the card uses range artwork rather than an exact bottle photo. */
+  imageIsIllustrative?: boolean;
   /** Category-only preview card. It must never be added to a live basket. */
   placeholder?: boolean;
 };
@@ -428,6 +435,7 @@ export const alcoholTypes: readonly AlcoholType[] = [
   "Sparkling",
   "Liqueur",
   "Non-alcoholic",
+  "Other",
   "Promotion",
 ];
 
@@ -450,7 +458,7 @@ export const businessInfo = {
   services: ["Delivery", "In-store collection", "In-store shopping"],
 } as const;
 
-export const DELIVERY_FEE_CENTS = 900;
+export const EXPRESS_DELIVERY_FLAT_FEE_CENTS = 1_000;
 export const AUSPOST_NEXT_DAY_PREVIEW_FEE_CENTS = 1_200;
 export const AUSPOST_NEXT_DAY_DEFAULT_FEE_CENTS = AUSPOST_NEXT_DAY_PREVIEW_FEE_CENTS;
 export const MAINTENANCE_FEE_CENTS = 99;

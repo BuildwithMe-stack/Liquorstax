@@ -109,6 +109,31 @@ a { color: inherit; }
 .product-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
 .product-visual { position: relative; aspect-ratio: 4 / 4.7; overflow: hidden; background: var(--cream); }
 .product-image { object-fit: cover; }
+.product-artwork { --art-deep: #133c32; --art-main: #2e7259; --art-label: #d8ff45; position: absolute; inset: 0; isolation: isolate; overflow: hidden; display: grid; place-items: center; background: linear-gradient(145deg, #f4f0e6, #dfeae4); }
+.product-artwork:before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, #ffffff38 0 1px, transparent 1px 15px); }
+.product-visual.gold .product-artwork, .product-visual.amber .product-artwork { --art-deep: #3f2710; --art-main: #9c6522; --art-label: #ffd52f; background: linear-gradient(145deg, #fff3d1, #ead3a0); }
+.product-visual.coral .product-artwork { --art-deep: #4b1d18; --art-main: #c94b3e; --art-label: #fff0d8; background: linear-gradient(145deg, #ffe1d7, #f8bcae); }
+.product-visual.merlot .product-artwork, .product-visual.plum .product-artwork { --art-deep: #351527; --art-main: #7c3159; --art-label: #ffe2ef; background: linear-gradient(145deg, #f5dce6, #e5bfd0); }
+.product-visual.ice .product-artwork, .product-visual.mint .product-artwork { --art-deep: #153b47; --art-main: #4e94a8; --art-label: #e9ffff; background: linear-gradient(145deg, #dff3f4, #bbe1e5); }
+.product-visual.botanical .product-artwork, .product-visual.agave .product-artwork { --art-deep: #143524; --art-main: #39835b; --art-label: #f2ffc5; background: linear-gradient(145deg, #d9ecd6, #b9dbb8); }
+.product-visual.molasses .product-artwork { --art-deep: #26180f; --art-main: #6f4222; --art-label: #f6d99c; background: linear-gradient(145deg, #efd7b7, #d9b78e); }
+.product-visual.lager .product-artwork, .product-visual.champagne .product-artwork { --art-deep: #473910; --art-main: #b48e24; --art-label: #fff7c5; background: linear-gradient(145deg, #fff0a3, #efd16b); }
+.product-visual.apple .product-artwork { --art-deep: #27491c; --art-main: #78a43a; --art-label: #f3ffd1; background: linear-gradient(145deg, #e9f3bf, #c8e18e); }
+.artwork-glow { width: 74%; aspect-ratio: 1; position: absolute; border-radius: 50%; background: var(--art-label); opacity: .34; filter: blur(2px); transform: translateY(20%); }
+.artwork-cap { width: 14%; height: 10%; position: absolute; top: 13%; z-index: 1; border-radius: 4px 4px 2px 2px; background: var(--art-deep); box-shadow: inset 0 -3px #ffffff2a; }
+.artwork-bottle { width: 43%; height: 65%; position: absolute; top: 20%; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 5px solid #ffffff2e; border-radius: 22% 22% 13% 13%; background: linear-gradient(100deg, #ffffff21, transparent 30%), var(--art-main); color: var(--art-label); box-shadow: inset -12px 0 #00000018, 0 19px 28px #15231d35; text-align: center; }
+.artwork-bottle:after { content: ""; position: absolute; inset: 32% 12% 12%; border: 2px solid #ffffff58; border-radius: 5px; }
+.artwork-bottle b, .artwork-bottle small { z-index: 1; }
+.artwork-bottle b { font-family: Georgia, serif; font-size: clamp(19px, 3vw, 35px); letter-spacing: -.08em; }
+.artwork-bottle small { max-width: 76%; color: #ffffffd9; font-size: 7px; font-weight: 900; letter-spacing: .08em; line-height: 1.15; text-transform: uppercase; }
+.artwork-brand { position: absolute; z-index: 1; bottom: 8%; max-width: 82%; overflow: hidden; color: var(--art-deep); font-size: 8px; font-weight: 950; letter-spacing: .13em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.product-artwork.compact { border-radius: inherit; }
+.product-artwork.compact .artwork-glow { width: 95%; }
+.product-artwork.compact .artwork-cap { top: 8%; }
+.product-artwork.compact .artwork-bottle { width: 54%; height: 72%; top: 14%; border-width: 2px; border-radius: 20% 20% 10% 10%; gap: 2px; box-shadow: inset -5px 0 #00000018; }
+.product-artwork.compact .artwork-bottle:after { inset: 31% 10% 11%; border-width: 1px; }
+.product-artwork.compact .artwork-bottle b { font-size: 14px; }
+.product-artwork.compact .artwork-bottle small { font-size: 4px; }
 .sticker-stack { position: absolute; z-index: 2; top: 12px; left: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .sticker { width: max-content; display: inline-block; padding: 6px 8px; border-radius: 3px; background: var(--forest); color: white; font-size: 8px; font-weight: 950; letter-spacing: .08em; }
 .sticker-sale, .sticker-price-drop { background: var(--orange); }
@@ -128,6 +153,9 @@ a { color: inherit; }
 .price-row button { width: 39px; height: 39px; flex: none; border: 0; border-radius: 5px; background: var(--lime); color: var(--forest-deep); font-size: 25px; }
 .price-row button:disabled { cursor: not-allowed; background: var(--cream); color: var(--muted); }
 .price-row .stock-coming { font-size: 13px; color: var(--forest); }
+.stock-status, .image-note { display: block; margin-top: 8px; font-size: 8px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.stock-status { color: #2d6b44; }
+.image-note { color: #727a75; }
 .archive-label { display: block; margin-top: 10px; color: #7a827d; font-size: 8px; }
 .order-again-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 25px; border: 1px solid var(--line); border-left: 5px solid var(--orange); border-radius: 7px; background: white; }
 .order-again-card div { display: grid; gap: 5px; }

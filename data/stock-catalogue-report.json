@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-07-24T15:26:04.180Z",
+  "sourceRows": 1776,
+  "sourceProductIds": 1107,
+  "sellableProducts": 557,
+  "exactPhotoMatches": 3,
+  "illustrativeProducts": 554,
+  "inconsistentStockGroups": 0,
+  "priceConflictGroups": 0,
+  "excluded": {
+    "no verified stock": 517,
+    "missing sell price": 20,
+    "non-catalogue item": 13
+  },
+  "stockMethod": "min((Cases on hand × Case Quantity) + Items on hand) per source ID; then floor(unit stock ÷ sellable Quantity)",
+  "pricingMethod": "Price is the supplied shop selling price for the selected sellable Quantity tier"
+}

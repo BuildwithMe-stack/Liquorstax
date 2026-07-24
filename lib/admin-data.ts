@@ -8,6 +8,7 @@ import {
   type ProductSticker,
 } from "./catalogue";
 import { melbourneTodayIsoDate } from "./delivery";
+import { stockCatalogueProducts } from "./stock-catalogue";
 
 let client: NeonQueryFunction<false, false> | undefined;
 let schemaPromise: Promise<void> | undefined;
@@ -143,20 +144,20 @@ export async function getPublicCatalogueData(): Promise<{
 }> {
   if (!isAdminDatabaseConfigured()) {
     if (process.env.COMMERCE_LIVE === "true") throw new Error("The live catalogue database is not configured");
-    return { products: [], offers: [] };
+    return { products: [...stockCatalogueProducts], offers: [] };
   }
   try {
     await ensureAdminSchema();
     const sql = getClient();
     const [productRows, offerRows] = await Promise.all([
       sql`
-        SELECT id, name, alcohol_type, description, volume_label, price_cents,
+        SELECT id, source_product_id, name, alcohol_type, description, volume_label, price_cents,
           inventory_quantity, image_url, is_placeholder, is_new, is_on_sale,
           is_member_offer
         FROM store_products
         WHERE is_active = true
         ORDER BY is_on_sale DESC, is_new DESC, updated_at DESC, id DESC
-        LIMIT 250
+        LIMIT 1500
       `,
       sql`
         SELECT id, title, description, eyebrow, image_url, link_url
@@ -166,14 +167,17 @@ export async function getPublicCatalogueData(): Promise<{
         LIMIT 10
       `,
     ]);
+    const databaseProducts = productRows.flatMap(toPublicProduct);
     return {
-      products: productRows.flatMap(toPublicProduct),
+      products: process.env.COMMERCE_LIVE === "true"
+        ? databaseProducts
+        : mergePreviewCatalogue(databaseProducts),
       offers: offerRows.flatMap(toPublicOffer),
     };
   } catch (error) {
     console.error("Unable to load the database catalogue", error);
     if (process.env.COMMERCE_LIVE === "true") throw error;
-    return { products: [], offers: [] };
+    return { products: [...stockCatalogueProducts], offers: [] };
   }
 }
 
@@ -453,9 +457,12 @@ function toPublicProduct(row: unknown): Product[] {
     ...(isNew ? ["new" as const, "top-picks" as const] : []),
   ];
   const name = String(row.name ?? "Product");
-  const image = safeLocalImage(String(row.image_url ?? ""));
+  const image = safeLocalImage(String(row.image_url ?? ""), "");
   return [{
     id: Number(row.id),
+    sourceProductId: typeof row.source_product_id === "string" && row.source_product_id.trim()
+      ? row.source_product_id.trim()
+      : undefined,
     name,
     brand: "Liquor Stax",
     category: alcoholType,
@@ -468,9 +475,20 @@ function toPublicProduct(row: unknown): Product[] {
     initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(""),
     imageSrc: image,
     imageAlt: `${name} at Liquor Stax Craigieburn`,
+    imageIsIllustrative: !image,
     inventoryQuantity,
     placeholder,
   }];
+}
+
+function mergePreviewCatalogue(databaseProducts: Product[]): Product[] {
+  const databaseSourceIds = new Set(
+    databaseProducts.flatMap((product) => product.sourceProductId ? [product.sourceProductId] : []),
+  );
+  return [
+    ...stockCatalogueProducts.filter((product) => !databaseSourceIds.has(product.sourceProductId ?? "")),
+    ...databaseProducts,
+  ];
 }
 
 function toPublicOffer(row: unknown): OfferSlide[] {

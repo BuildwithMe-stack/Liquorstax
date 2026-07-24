@@ -168,28 +168,25 @@ export default function Storefront({
         if (!Array.isArray(data.products) || !Array.isArray(data.offers)) {
           throw new Error("Catalogue response was incomplete");
         }
-        if (LIVE_CATALOGUE_MODE) {
-          const liveProducts = data.products;
-          setCatalogueProducts(liveProducts);
-          setActiveOfferSlides(data.offers);
-          setOfferIndex(0);
-          setCatalogueStatus("ready");
-          return;
-        }
-        if (Array.isArray(data.products) && data.products.length) {
-          const dynamicIds = new Set(data.products.map((product) => product.id));
-          setCatalogueProducts([...products.filter((product) => !dynamicIds.has(product.id)), ...data.products]);
-        }
-        if (Array.isArray(data.offers) && data.offers.length) {
-          setActiveOfferSlides([...data.offers, ...offerSlides]);
-          setOfferIndex(0);
-        }
+        // A successful server catalogue replaces the archived design cards.
+        // In preview, legacy cards are only an offline fallback while the
+        // owner-supplied stock import is loading.
+        setCatalogueProducts(data.products.length ? data.products : LIVE_CATALOGUE_MODE ? [] : [...products]);
+        setActiveOfferSlides(data.offers.length ? data.offers : [...offerSlides]);
+        setOfferIndex(0);
+        setCatalogueStatus("ready");
       })
       .catch(() => {
-        if (controller.signal.aborted || !LIVE_CATALOGUE_MODE) return;
-        setCatalogueProducts([]);
-        setActiveOfferSlides([]);
-        setCatalogueStatus("unavailable");
+        if (controller.signal.aborted) return;
+        if (LIVE_CATALOGUE_MODE) {
+          setCatalogueProducts([]);
+          setActiveOfferSlides([]);
+          setCatalogueStatus("unavailable");
+          return;
+        }
+        setCatalogueProducts([...products]);
+        setActiveOfferSlides([...offerSlides]);
+        setCatalogueStatus("ready");
       });
     return () => controller.abort();
   }, [hydrated]);
@@ -426,6 +423,10 @@ export default function Storefront({
 
   const cataloguePage = page === "home" || page === "products" || page === "cart" || page === "lists";
   const catalogueBlocked = LIVE_CATALOGUE_MODE && cataloguePage && catalogueStatus !== "ready";
+  const hasStockedCatalogue = catalogueProducts.some(
+    (product) => !product.placeholder && product.priceCents > 0 && product.inventoryQuantity !== undefined,
+  );
+  const showPreviewContent = !LIVE_CATALOGUE_MODE && !hasStockedCatalogue;
 
   return (
     <main className="site-frame">
@@ -486,10 +487,10 @@ export default function Storefront({
               openSignUp={() => setSignUpOpen(true)}
               catalogueProducts={catalogueProducts}
               slides={activeOfferSlides}
-              showPreviewContent={!LIVE_CATALOGUE_MODE}
+              showPreviewContent={showPreviewContent}
             />
           )}
-          {page === "products" && <ProductsPage catalogueProducts={catalogueProducts} selectedType={selectedType} setSelectedType={setSelectedType} saleOnly={saleOnly} setSaleOnly={setSaleOnly} query={searchQuery} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} showPreviewContent={!LIVE_CATALOGUE_MODE} />}
+          {page === "products" && <ProductsPage catalogueProducts={catalogueProducts} selectedType={selectedType} setSelectedType={setSelectedType} saleOnly={saleOnly} setSaleOnly={setSaleOnly} query={searchQuery} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} showPreviewContent={showPreviewContent} />}
           {page === "cart" && <CartPage items={cartItems} updateQuantity={updateQuantity} subtotalCents={subtotalCents} profile={profile} checkoutState={checkoutState} checkoutError={checkoutError} completedOrder={completedOrder} submitCheckout={submitCheckout} />}
           {page === "lists" && <ListsPage catalogueProducts={catalogueProducts} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />}
         </>
@@ -558,10 +559,18 @@ function HomePage({
   showPreviewContent: boolean;
 }) {
   const slide = slides.length ? slides[offerIndex % slides.length] : undefined;
-  const currentOffers = catalogueProducts.filter((product) => product.collections.includes("current-offers"));
-  const memberOffers = catalogueProducts.filter((product) => product.collections.includes("member-offers"));
-  const topPicks = catalogueProducts.filter((product) => product.collections.includes("top-picks"));
-  const catalogue = catalogueProducts.filter((product) => product.collections.includes("catalogue"));
+  const usedRailIds = new Set<number>();
+  const takeRail = (candidates: Product[], maximum = 14) => candidates
+    .filter((product) => !usedRailIds.has(product.id))
+    .slice(0, maximum)
+    .map((product) => {
+      usedRailIds.add(product.id);
+      return product;
+    });
+  const currentOffers = takeRail(catalogueProducts.filter((product) => product.collections.includes("current-offers")));
+  const memberOffers = takeRail(catalogueProducts.filter((product) => product.collections.includes("member-offers")));
+  const topPicks = takeRail(catalogueProducts.filter((product) => product.collections.includes("top-picks")));
+  const catalogue = takeRail(catalogueProducts.filter((product) => product.collections.includes("catalogue")), 16);
 
   return (
     <>
@@ -594,7 +603,7 @@ function HomePage({
       )}
 
       <section className="service-strip shell">
-        <div><b>⌖</b><span><strong>Express at $1.50/km</strong><small>Google road-distance quote</small></span></div>
+        <div><b>⌖</b><span><strong>Express $10 flat rate</strong><small>Address checked for the delivery zone</small></span></div>
         <div><b>◷</b><span><strong>Normal next available business day</strong><small>Australia Post dispatch</small></span></div>
         <div><b>18+</b><span><strong>ID checked at the door</strong><small>Responsible delivery</small></span></div>
         <div><b>✓</b><span><strong>Secure checkout</strong><small>Apple Pay, Google Pay or card</small></span></div>
@@ -607,13 +616,13 @@ function HomePage({
         </section>
       )}
 
-      <ProductRail title="Current offers" eyebrow="On the counter" copy="Swipe through the latest offer layout for owner approval." products={currentOffers} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
+      <ProductRail title="Current offers" eyebrow="On the counter" copy="Owner-set offers appear here as soon as they are published from the admin portal." products={currentOffers} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
 
       {!profile && <section className="member-banner shell"><div><p className="eyebrow light">Stax members</p><h2>Member prices. Faster checkout.</h2><p>Join the sample account to see member pricing, save lists and order again.</p></div><button className="button light" onClick={openSignUp}>Join Stax free</button></section>}
 
       <ProductRail title="Member offers" eyebrow="More value for members" copy="Sign in to save and quickly reorder the owner-selected member range." products={memberOffers} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} memberRail />
-      <ProductRail title="Top picks" eyebrow="Craigieburn favourites" copy="A quick swipe through the shop-floor standouts." products={topPicks} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
-      <ProductRail title="Catalogue" eyebrow="Browse the range" copy="Real public page photography arranged for the new catalogue experience." products={catalogue} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
+      <ProductRail title="Top picks" eyebrow="Craigieburn favourites" copy="A quick swipe through the latest high-stock shop picks." products={topPicks} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
+      <ProductRail title={showPreviewContent ? "Catalogue" : "In-stock catalogue"} eyebrow="Browse the range" copy={showPreviewContent ? "Owner sample range for the new catalogue experience." : "Owner-supplied selling prices and available packs from the latest stock import."} products={catalogue} savedIds={savedIds} addToCart={addToCart} toggleSaved={toggleSaved} profile={profile} />
 
       <section className="shell type-section">
         <div className="section-title"><div><p className="eyebrow">Shop your way</p><h2>Browse by drink</h2></div><Link href="/products">See all products →</Link></div>
@@ -660,7 +669,11 @@ function ProductCard({ product, saved, add, toggleSaved, profile, memberRail = f
   return (
     <article className="product-card">
       <div className={`product-visual ${product.tone}`}>
-        <Image src={product.imageSrc} alt={product.imageAlt} fill className="product-image" style={{ objectPosition: product.imagePosition, transform: `scale(${product.imageScale ?? 1})`, transformOrigin: product.imageTransformOrigin }} sizes="(max-width: 600px) 72vw, (max-width: 960px) 38vw, 270px" />
+        {product.imageSrc ? (
+          <Image src={product.imageSrc} alt={product.imageAlt} fill className="product-image" style={{ objectPosition: product.imagePosition, transform: `scale(${product.imageScale ?? 1})`, transformOrigin: product.imageTransformOrigin }} sizes="(max-width: 600px) 72vw, (max-width: 960px) 38vw, 270px" />
+        ) : (
+          <ProductArtwork product={product} />
+        )}
         <div className="sticker-stack">{product.stickers.map((sticker) => <span className={`sticker sticker-${sticker.toLowerCase().replace(" ", "-")}`} key={sticker}>{sticker}</span>)}</div>
         <button className={`heart ${saved ? "saved" : ""}`} onClick={toggleSaved} aria-label={saved ? `Remove ${product.name} from my list` : `Save ${product.name} to my list`}>{saved ? "♥" : "♡"}</button>
       </div>
@@ -670,9 +683,22 @@ function ProductCard({ product, saved, add, toggleSaved, profile, memberRail = f
         <p className="product-detail">{product.detail}</p>
         {product.memberPriceCents && !unavailable && <p className="member-price">Member {formatAud(product.memberPriceCents)}</p>}
         <div className="price-row"><p>{unavailable ? <strong className="stock-coming">{unavailableLabel}</strong> : <><strong>{formatAud(displayPrice)}</strong>{product.wasCents && <del>{formatAud(product.wasCents)}</del>}</>}</p><button onClick={add} disabled={unavailable} aria-label={unavailable ? `${product.name} is not currently available` : `Add ${product.name} to cart`}>{unavailable ? "…" : "+"}</button></div>
+        {!unavailable && product.inventoryQuantity !== undefined && <small className="stock-status">{product.inventoryQuantity <= 3 ? `Only ${product.inventoryQuantity} left` : "In stock now"}</small>}
+        {product.imageIsIllustrative && <small className="image-note">Illustrative range artwork</small>}
         <small className="archive-label">{product.placeholder ? "Placeholder · not available to purchase" : unavailable ? "Currently unavailable to purchase" : "GST included · $0.99 maintenance fee per order"}</small>
       </div>
     </article>
+  );
+}
+
+function ProductArtwork({ product, compact = false }: { product: Product; compact?: boolean }) {
+  return (
+    <div className={`product-artwork ${compact ? "compact" : ""}`} role="img" aria-label={product.imageAlt}>
+      <span className="artwork-glow" aria-hidden="true" />
+      <span className="artwork-cap" aria-hidden="true" />
+      <span className="artwork-bottle" aria-hidden="true"><b>{product.initials}</b><small>{product.alcoholType}</small></span>
+      {!compact && <span className="artwork-brand" aria-hidden="true">{product.brand}</span>}
+    </div>
   );
 }
 
@@ -814,13 +840,13 @@ function CartPage({ items, updateQuantity, subtotalCents, profile, checkoutState
 
   return (
     <div className="page-shell shell" id="delivery">
-      <header className="page-heading compact"><p className="eyebrow">Secure checkout</p><h1>Cart & delivery</h1><p>Express is priced from the Google road distance. Normal orders are prepared for the next available business-day Australia Post dispatch.</p></header>
+      <header className="page-heading compact"><p className="eyebrow">Secure checkout</p><h1>Cart & delivery</h1><p>Express delivery is a flat $10 after the address is checked. Normal orders are prepared for the next available business-day Australia Post dispatch.</p></header>
       <p className="fee-disclosure"><strong>One clear total:</strong> all displayed prices include GST and every order includes the disclosed $0.99 maintenance fee.</p>
       <div className="cart-layout">
         <div className="cart-main">
           <section className="cart-card"><h2>Your cart</h2>{items.map((item) => {
             const atInventoryLimit = item.quantity >= maxPurchasableQuantity(item);
-            return <div className="cart-line" key={item.id}><div className="cart-thumb"><Image src={item.imageSrc} alt="" fill sizes="76px" /></div><div><strong>{item.name}</strong><small>{item.detail}</small><div className="qty"><button onClick={() => updateQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><span aria-live="polite">{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)} disabled={atInventoryLimit} aria-label={atInventoryLimit ? `${item.name} has reached the available stock limit` : `Add one ${item.name}`}>+</button></div></div><b>{formatAud(item.priceCents * item.quantity)}</b></div>;
+            return <div className="cart-line" key={item.id}><div className="cart-thumb">{item.imageSrc ? <Image src={item.imageSrc} alt="" fill sizes="76px" /> : <ProductArtwork product={item} compact />}</div><div><strong>{item.name}</strong><small>{item.detail}</small><div className="qty"><button onClick={() => updateQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><span aria-live="polite">{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)} disabled={atInventoryLimit} aria-label={atInventoryLimit ? `${item.name} has reached the available stock limit` : `Add one ${item.name}`}>+</button></div></div><b>{formatAud(item.priceCents * item.quantity)}</b></div>;
           })}</section>
           <form id="checkout-form" className="checkout-form" key={profile?.email ?? "guest"} onSubmit={submitWithFreshDelivery}>
             <section className="checkout-card">
@@ -837,7 +863,7 @@ function CartPage({ items, updateQuantity, subtotalCents, profile, checkoutState
             <section className="checkout-card">
               <div className="step-title"><span>2</span><div><h2>Choose delivery</h2><p>The delivery cost is included in the total before payment.</p></div></div>
               <div className="delivery-methods">
-                <button type="button" className={deliveryMethod === "express" ? "selected" : ""} onClick={() => setDeliveryMethod("express")}><strong>Express delivery</strong><span>$1.50 per road kilometre</span></button>
+                <button type="button" className={deliveryMethod === "express" ? "selected" : ""} onClick={() => setDeliveryMethod("express")}><strong>Express delivery</strong><span>$10 flat rate</span></button>
                 <button type="button" className={deliveryMethod === "normal" ? "selected" : ""} onClick={() => setDeliveryMethod("normal")}><strong>Normal delivery</strong><span>Next available business day via Australia Post</span></button>
               </div>
 
