@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "admin:hash": "node scripts/hash-admin-password.mjs",
     "test": "pnpm lint && pnpm typecheck",
     "check": "pnpm test && pnpm build"
   },

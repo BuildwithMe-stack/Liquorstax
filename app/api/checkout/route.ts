@@ -1,13 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { CheckoutValidationError, validateCheckout } from "@/lib/checkout";
-import {
-  InsufficientAccountCreditError,
-  getAccountBalanceCents,
-  isDatabaseConfigured,
-  placeDatabaseOrder,
-} from "@/lib/database";
-import { CATALOGUE_PREVIEW_ONLY, DEMO_ACCOUNT_OPENING_BALANCE_CENTS } from "@/lib/catalogue";
+import { CATALOGUE_PREVIEW_ONLY, DEMO_ACCOUNT_OPENING_BALANCE_CENTS, products } from "@/lib/catalogue";
+import { getPublicCatalogueData } from "@/lib/admin-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,36 +16,27 @@ type DemoAccountState = {
   lastOrderNumber?: string;
   lastSubtotalCents?: number;
   lastDeliveryFeeCents?: number;
+  lastMaintenanceFeeCents?: number;
+  lastGstIncludedCents?: number;
   lastTotalCents?: number;
 };
 
 export async function GET(request: NextRequest) {
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json({
-      accountId: "stax-1001",
-      balanceCents: readDemoState(request).balanceCents,
-      mode: "demo",
-    });
+  if (!sampleCheckoutEnabled()) {
+    return NextResponse.json({ error: "Sample checkout is disabled" }, { status: 404 });
   }
-
-  try {
-    return NextResponse.json({
-      accountId: "stax-1001",
-      balanceCents: await getAccountBalanceCents(),
-      mode: "database",
-    });
-  } catch (error) {
-    console.error("Unable to load the customer account", error);
-    return NextResponse.json({ error: "Account service is temporarily unavailable" }, { status: 503 });
-  }
+  return NextResponse.json({
+    accountId: "owner-sample",
+    balanceCents: readDemoState(request).balanceCents,
+    mode: "demo",
+  });
 }
 
 export async function POST(request: NextRequest) {
-  if (CATALOGUE_PREVIEW_ONLY && isDatabaseConfigured()) {
-    return NextResponse.json(
-      { error: "Current catalogue prices must be confirmed before connected-account orders can be charged" },
-      { status: 409 },
-    );
+  // This endpoint can only create browser-local, zero-value sample orders. It
+  // must never become an alternate path around Stripe when commerce is live.
+  if (!sampleCheckoutEnabled()) {
+    return NextResponse.json({ error: "Sample checkout is disabled" }, { status: 404 });
   }
 
   const contentLength = Number(request.headers.get("content-length") ?? 0);
@@ -70,71 +56,69 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const order = validateCheckout(input);
-
-    if (!isDatabaseConfigured()) {
-      const demoState = readDemoState(request);
-      if (demoState.lastCheckoutToken === order.checkoutToken && demoState.lastOrderNumber) {
-        return NextResponse.json({
-          orderNumber: demoState.lastOrderNumber,
-          subtotalCents: demoState.lastSubtotalCents,
-          deliveryFeeCents: demoState.lastDeliveryFeeCents,
-          totalCents: demoState.lastTotalCents,
-          balanceCents: demoState.balanceCents,
-          mode: "demo",
-        });
-      }
-      if (demoState.balanceCents < order.totalCents) {
-        return NextResponse.json({ error: "Insufficient account credit" }, { status: 402 });
-      }
-
-      const orderNumber = createOrderNumber();
-      const nextState: DemoAccountState = {
-        balanceCents: demoState.balanceCents - order.totalCents,
-        lastCheckoutToken: order.checkoutToken,
-        lastOrderNumber: orderNumber,
-        lastSubtotalCents: order.subtotalCents,
-        lastDeliveryFeeCents: order.deliveryFeeCents,
-        lastTotalCents: order.totalCents,
-      };
-      const response = NextResponse.json({
-        orderNumber,
-        subtotalCents: order.subtotalCents,
-        deliveryFeeCents: order.deliveryFeeCents,
-        totalCents: order.totalCents,
-        balanceCents: nextState.balanceCents,
+    const databaseCatalogue = await getPublicCatalogueData();
+    const dynamicIds = new Set(databaseCatalogue.products.map((product) => product.id));
+    const order = validateCheckout(input, [
+      ...products.filter((product) => !dynamicIds.has(product.id)),
+      ...databaseCatalogue.products,
+    ]);
+    const demoState = readDemoState(request);
+    if (demoState.lastCheckoutToken === order.checkoutToken && demoState.lastOrderNumber) {
+      return NextResponse.json({
+        orderNumber: demoState.lastOrderNumber,
+        subtotalCents: demoState.lastSubtotalCents,
+        deliveryFeeCents: demoState.lastDeliveryFeeCents,
+        maintenanceFeeCents: demoState.lastMaintenanceFeeCents,
+        gstIncludedCents: demoState.lastGstIncludedCents,
+        totalCents: demoState.lastTotalCents,
+        balanceCents: demoState.balanceCents,
         mode: "demo",
       });
-      response.cookies.set(DEMO_BALANCE_COOKIE, encodeDemoState(nextState), {
-        httpOnly: true,
-        maxAge: 60 * 60 * 24 * 30,
-        path: "/",
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      });
-      return response;
+    }
+    if (demoState.balanceCents < order.totalCents) {
+      return NextResponse.json({ error: "Insufficient sample credit" }, { status: 402 });
     }
 
-    const result = await placeDatabaseOrder(order);
-    return NextResponse.json({
-      orderNumber: result.orderNumber,
+    const orderNumber = createOrderNumber();
+    const nextState: DemoAccountState = {
+      balanceCents: demoState.balanceCents - order.totalCents,
+      lastCheckoutToken: order.checkoutToken,
+      lastOrderNumber: orderNumber,
+      lastSubtotalCents: order.subtotalCents,
+      lastDeliveryFeeCents: order.deliveryFeeCents,
+      lastMaintenanceFeeCents: order.maintenanceFeeCents,
+      lastGstIncludedCents: order.gstIncludedCents,
+      lastTotalCents: order.totalCents,
+    };
+    const response = NextResponse.json({
+      orderNumber,
       subtotalCents: order.subtotalCents,
       deliveryFeeCents: order.deliveryFeeCents,
+      maintenanceFeeCents: order.maintenanceFeeCents,
+      gstIncludedCents: order.gstIncludedCents,
       totalCents: order.totalCents,
-      balanceCents: result.balanceCents,
-      mode: "database",
+      balanceCents: nextState.balanceCents,
+      mode: "demo",
     });
+    response.cookies.set(DEMO_BALANCE_COOKIE, encodeDemoState(nextState), {
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+    return response;
   } catch (error) {
     if (error instanceof CheckoutValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    if (error instanceof InsufficientAccountCreditError) {
-      return NextResponse.json({ error: error.message }, { status: 402 });
-    }
-
-    console.error("Checkout failed", error);
-    return NextResponse.json({ error: "Account service is temporarily unavailable" }, { status: 503 });
+    console.error("Sample checkout failed", error);
+    return NextResponse.json({ error: "Sample checkout is temporarily unavailable" }, { status: 503 });
   }
+}
+
+function sampleCheckoutEnabled(): boolean {
+  return CATALOGUE_PREVIEW_ONLY && process.env.COMMERCE_LIVE !== "true";
 }
 
 function readDemoState(request: NextRequest): DemoAccountState {
@@ -170,8 +154,8 @@ function encodeDemoState(state: DemoAccountState): string {
 }
 
 function signDemoPayload(payload: string): string {
-  // This cookie only protects the zero-value preview account. Real balances are
-  // stored in Postgres whenever DATABASE_URL (or POSTGRES_URL) is configured.
+  // This cookie protects only the zero-value owner sample. It is never read by
+  // the live Stripe checkout path.
   const secret = process.env.DEMO_ACCOUNT_SECRET || "liquor-stax-preview-account";
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }

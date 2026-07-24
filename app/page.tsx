@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Storefront from "./storefront";
 
 export const metadata: Metadata = {
-  title: "Liquor Stax — Drinks delivered on your time",
+  title: "Liquor Stax Craigieburn — Your local shop, delivered",
   description:
-    "Shop Liquor Stax Craigieburn spirits, premix and local specials with scheduled delivery.",
+    "Browse local offers, member picks and the Liquor Stax Craigieburn catalogue with express delivery or Australia Post dispatch.",
 };
 
 export default function Home() {
-  return <Storefront />;
+  return <Storefront page="home" />;
 }
